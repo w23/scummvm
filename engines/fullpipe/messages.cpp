@@ -37,7 +37,7 @@ ExCommand::ExCommand() {
 	_parId = 0;
 }
 
-ExCommand::ExCommand(ExCommand *src) : Message(src) {
+ExCommand::ExCommand(ExCommand *src) : Message(*src) {
 	_field_3C = 1;
 	_messageNum = src->_messageNum;
 	_excFlags = src->_excFlags;
@@ -146,36 +146,12 @@ void ExCommand::firef34() {
 	}
 }
 
-ExCommand2::ExCommand2(int messageKind, int parentId, Common::Point **points, int pointsSize) : ExCommand(parentId, messageKind, 0, 0, 0, 0, 1, 0, 0, 0) {
+ExCommand2::ExCommand2(int messageKind, int parentId, const PointList &points) : ExCommand(parentId, messageKind, 0, 0, 0, 0, 1, 0, 0, 0) {
 	_objtype = kObjTypeExCommand2;
-
-	_pointsSize = pointsSize;
-	_points = (Common::Point **)malloc(sizeof(Common::Point *) * pointsSize);
-
-	for (int i = 0; i < pointsSize; i++) {
-		_points[i] = new Common::Point;
-
-		*_points[i] = *points[i];
-	}
+	_points = points;
 }
 
-ExCommand2::ExCommand2(ExCommand2 *src) : ExCommand(src) {
-	_pointsSize = src->_pointsSize;
-	_points = (Common::Point **)malloc(sizeof(Common::Point *) * _pointsSize);
-
-	for (int i = 0; i < _pointsSize; i++) {
-		_points[i] = new Common::Point;
-
-		*_points[i] = *src->_points[i];
-	}
-}
-
-ExCommand2::~ExCommand2() {
-	for (int i = 0; i < _pointsSize; i++)
-		delete _points[i];
-
-	free(_points);
-}
+ExCommand2::ExCommand2(ExCommand2 *src) : ExCommand(src), _points(src->_points) {}
 
 ExCommand2 *ExCommand2::createClone() {
 	return new ExCommand2(this);
@@ -196,22 +172,6 @@ Message::Message() {
 	_field_2C = 0;
 	_field_30 = 0;
 	_field_34 = 0;
-}
-
-Message::Message(Message *src) {
-	_parentId = src->_parentId;
-	_messageKind = src->_messageKind;
-	_x = src->_x;
-	_y = src->_y;
-	_field_14 = src->_field_14;
-	_sceneClickX = src->_sceneClickX;
-	_sceneClickY = src->_sceneClickY;
-	_field_20 = src->_field_20;
-	_field_24 = src->_field_24;
-	_param = src->_param;
-	_field_2C = src->_field_2C;
-	_field_30 = src->_field_30;
-	_field_34 = src->_field_34;
 }
 
 Message::Message(int16 parentId, int messageKind, int x, int y, int a6, int a7, int sceneClickX, int sceneClickY, int a10) {
@@ -240,9 +200,6 @@ ObjstateCommand::ObjstateCommand(ObjstateCommand *src) : ExCommand(src) {
 	_objtype = kObjTypeObjstateCommand;
 
 	_objCommandName = src->_objCommandName;
-}
-
-ObjstateCommand::~ObjstateCommand() {
 }
 
 bool ObjstateCommand::load(MfcArchive &file) {
@@ -306,7 +263,7 @@ MessageQueue::MessageQueue(MessageQueue *src, int parId, int field_38) {
 
 	_id = g_fp->_globalMessageQueueList->compact();
 	_dataId = src->_dataId;
-	_flags = src->_flags;
+	_flags = src->_flags & ~kInGlobalQueue;
 	_queueName = "";
 
 	g_fp->_globalMessageQueueList->addMessageQueue(this);
@@ -317,18 +274,16 @@ MessageQueue::MessageQueue(MessageQueue *src, int parId, int field_38) {
 
 MessageQueue::~MessageQueue() {
 	for (Common::List<ExCommand *>::iterator it = _exCommands.begin(); it != _exCommands.end(); ++it) {
-		ExCommand *ex = (ExCommand *)*it;
+		ExCommand *ex = *it;
 
 		if (ex && ex->_excFlags & 2)
 			delete ex;
 	}
 
-	_exCommands.clear();
-
 	if (_field_14)
 		delete _field_14;
 
-	if (_flags & 2) {
+	if (_flags & kInGlobalQueue) {
 		g_fp->_globalMessageQueueList->removeQueueById(_id);
 	}
 
@@ -347,8 +302,8 @@ bool MessageQueue::load(MfcArchive &file) {
 	_queueName = file.readPascalString();
 
 	for (int i = 0; i < count; i++) {
-		ExCommand *tmp = (ExCommand *)file.readClass();
-
+		ExCommand *tmp = file.readClass<ExCommand>();
+		tmp->_excFlags |= 2;
 		_exCommands.push_back(tmp);
 	}
 
@@ -362,17 +317,15 @@ bool MessageQueue::load(MfcArchive &file) {
 
 bool MessageQueue::chain(StaticANIObject *ani) {
 	if (checkGlobalExCommandList1() && checkGlobalExCommandList2()) {
-		if (!(getFlags() & 2)) {
+		if (!(getFlags() & kInGlobalQueue)) {
 			g_fp->_globalMessageQueueList->addMessageQueue(this);
-			_flags |= 2;
 		}
 		if (ani) {
 			ani->queueMessageQueue(this);
-			return true;
 		} else {
 			sendNextCommand();
-			return true;
 		}
+		return true;
 	}
 	return false;
 }
@@ -653,8 +606,7 @@ MessageQueue *GlobalMessageQueueList::getMessageQueueById(int id) {
 void GlobalMessageQueueList::deleteQueueById(int id) {
 	for (uint i = 0; i < size(); i++)
 		if (_storage[i]->_id == id) {
-			remove_at(i);
-
+			delete remove_at(i);
 			disableQueueById(id);
 			return;
 		}
@@ -663,7 +615,7 @@ void GlobalMessageQueueList::deleteQueueById(int id) {
 void GlobalMessageQueueList::removeQueueById(int id) {
 	for (uint i = 0; i < size(); i++)
 		if (_storage[i]->_id == id) {
-			_storage[i]->_flags &= 0xFD; // It is quite pointless
+			_storage[i]->_flags &= ~kInGlobalQueue;
 			remove_at(i);
 
 			disableQueueById(id);
@@ -679,18 +631,15 @@ void GlobalMessageQueueList::disableQueueById(int id) {
 }
 
 int GlobalMessageQueueList::compact() {
-	int *useList = new int[size() + 2];
-
-	for (uint i = 0; i < size() + 2; i++)
-		useList[i] = 0;
+	Common::Array<bool> useList(size() + 2);
 
 	for (uint i = 0; i < size();) {
 		if (_storage[i]->_isFinished) {
 			disableQueueById(_storage[i]->_id);
-			remove_at(i);
+			delete remove_at(i);
 		} else {
 			if ((uint)_storage[i]->_id < size() + 2)
-				useList[_storage[i]->_id] = 1;
+				useList[_storage[i]->_id] = true;
 			i++;
 		}
 	}
@@ -702,15 +651,27 @@ int GlobalMessageQueueList::compact() {
 			break;
 	}
 
-	delete [] useList;
-
 	return i;
 }
 
 void GlobalMessageQueueList::addMessageQueue(MessageQueue *msg) {
-	msg->setFlags(msg->getFlags() | 2);
+	if ((msg->getFlags() & kInGlobalQueue) == 0) {
+		msg->setFlags(msg->getFlags() | kInGlobalQueue);
+		push_back(msg);
+	} else {
+		warning("Trying to add a MessageQueue already in the queue");
+	}
+}
 
-	push_back(msg);
+void GlobalMessageQueueList::clear() {
+	for (iterator it = begin(); it != end(); ++it) {
+		// The MessageQueue destructor will try to remove itself from the global
+		// queue if it thinks it is in the global queue, which will break the
+		// iteration over the list
+		(*it)->_flags &= ~kInGlobalQueue;
+		delete *it;
+	}
+	Common::Array<MessageQueue *>::clear();
 }
 
 void clearGlobalMessageQueueList() {
@@ -934,9 +895,8 @@ bool chainQueue(int queueId, int flags) {
 
 	nmq->_flags |= flags;
 
-	if (!nmq->chain(0)) {
-		delete nmq;
-
+	if (!nmq->chain(nullptr)) {
+		g_fp->_globalMessageQueueList->deleteQueueById(nmq->_id);
 		return false;
 	}
 
@@ -954,8 +914,7 @@ bool chainObjQueue(StaticANIObject *obj, int queueId, int flags) {
 	nmq->_flags |= flags;
 
 	if (!nmq->chain(obj)) {
-		delete nmq;
-
+		g_fp->_globalMessageQueueList->deleteQueueById(nmq->_id);
 		return false;
 	}
 

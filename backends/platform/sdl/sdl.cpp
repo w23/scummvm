@@ -43,6 +43,7 @@
 #include "backends/audiocd/sdl/sdl-audiocd.h"
 #endif
 
+#include "backends/events/default/default-events.h"
 #include "backends/events/sdl/sdl-events.h"
 #include "backends/mutex/sdl/sdl-mutex.h"
 #include "backends/timer/sdl/sdl-timer.h"
@@ -206,6 +207,16 @@ void OSystem_SDL::initBackend() {
 	// manager didn't provide one yet.
 	if (_eventSource == 0)
 		_eventSource = new SdlEventSource();
+
+	if (_eventManager == nullptr) {
+		DefaultEventManager *eventManager = new DefaultEventManager(_eventSource);
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+		// SDL 2 generates its own keyboard repeat events.
+		eventManager->setGenerateKeyRepeatEvents(false);
+#endif
+		_eventManager = eventManager;
+	}
+
 
 #ifdef USE_OPENGL
 #if SDL_VERSION_ATLEAST(2, 0, 0)
@@ -754,13 +765,10 @@ int SDL_SetAlpha(SDL_Surface *surface, Uint32 flag, Uint8 alpha) {
 		if (SDL_SetSurfaceBlendMode(surface, SDL_BLENDMODE_NONE)) {
 			return -1;
 		}
-		SDL_SetSurfaceRLE(surface, 0);
 	} else {
 		if (SDL_SetSurfaceBlendMode(surface, SDL_BLENDMODE_BLEND)) {
 			return -1;
 		}
-		if (flag & SDL_RLEACCEL)
-			SDL_SetSurfaceRLE(surface, 1);
 	}
 
 	return 0;
@@ -768,13 +776,7 @@ int SDL_SetAlpha(SDL_Surface *surface, Uint32 flag, Uint8 alpha) {
 
 #undef SDL_SetColorKey
 int SDL_SetColorKey_replacement(SDL_Surface *surface, Uint32 flag, Uint32 key) {
-	if (SDL_SetColorKey(surface, SDL_TRUE, key)) {
-		return -1;
-	}
-
-	if (flag & SDL_RLEACCEL)
-		SDL_SetSurfaceRLE(surface, 1);
-	return 0;
+	return SDL_SetColorKey(surface, SDL_TRUE, key) ? -1 : 0;
 }
 #endif
 

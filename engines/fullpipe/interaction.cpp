@@ -40,8 +40,8 @@ bool canInteractAny(GameObject *obj1, GameObject *obj2, int invId) {
 		sceneId = g_fp->_currentScene->_sceneId;
 
 	InteractionController *intC = getGameLoaderInteractionController();
-	for (ObList::iterator i = intC->_interactions.begin(); i != intC->_interactions.end(); ++i) {
-		Interaction *intr = (Interaction *)*i;
+	for (InteractionController::InteractionList::iterator i = intC->_interactions.begin(); i != intC->_interactions.end(); ++i) {
+		Interaction *intr = *i;
 
 		if (intr->_sceneId > 0 && intr->_sceneId != sceneId)
 			break;
@@ -56,8 +56,7 @@ bool canInteractAny(GameObject *obj1, GameObject *obj2, int invId) {
 }
 
 InteractionController::~InteractionController() {
-	_interactions.clear();
-
+	Common::for_each(_interactions.begin(), _interactions.end(), Common::DefaultDeleter<Interaction>());
 	removeMessageHandler(124, -1);
 }
 
@@ -69,10 +68,7 @@ bool InteractionController::load(MfcArchive &file) {
 
 int static_compSceneId = 0;
 
-bool InteractionController::compareInteractions(const void *p1, const void *p2) {
-	const Interaction *i1 = (const Interaction *)p1;
-	const Interaction *i2 = (const Interaction *)p2;
-
+bool InteractionController::compareInteractions(const Interaction *i1, const Interaction *i2) {
 	if (i2->_sceneId < i1->_sceneId) {
 		if (i1->_sceneId != static_compSceneId)
 			return false;
@@ -118,8 +114,8 @@ bool InteractionController::handleInteraction(StaticANIObject *subj, GameObject 
 	MessageQueue *mq;
 	ExCommand *ex;
 
-	for (ObList::iterator i = _interactions.begin(); i != _interactions.end(); ++i) {
-		Interaction *cinter = (Interaction *)*i;
+	for (InteractionList::iterator i = _interactions.begin(); i != _interactions.end(); ++i) {
+		Interaction *cinter = *i;
 
 		if (!cinter->canInteract(subj, obj, invId))
 			continue;
@@ -132,17 +128,17 @@ bool InteractionController::handleInteraction(StaticANIObject *subj, GameObject 
 
 			PicAniInfo aniInfo;
 
-			obj->getPicAniInfo(&aniInfo);
+			obj->getPicAniInfo(aniInfo);
 
-			if (cinter->_staticsId1) {
-				StaticANIObject *ani = (StaticANIObject *)obj;
+			if (cinter->_staticsId1 && obj->_objtype == kObjTypeStaticANIObject) {
+				StaticANIObject *ani = static_cast<StaticANIObject *>(obj);
 				ani->_messageQueueId = 0;
 				ani->changeStatics2(cinter->_staticsId1);
 			}
 			int xpos = cinter->_xOffs + obj->_ox;
 			int ypos = cinter->_yOffs + obj->_oy;
 
-			obj->setPicAniInfo(&aniInfo);
+			obj->setPicAniInfo(aniInfo);
 
 			if (abs(xpos - subj->_ox) > 1 || abs(ypos - subj->_oy) > 1) {
 				debugC(0, kDebugPathfinding, "Calling makeQueue() at [%d, %d]", xpos, ypos);
@@ -172,7 +168,10 @@ bool InteractionController::handleInteraction(StaticANIObject *subj, GameObject 
 		return false;
 
 	if (!inter->_objectId2) {
-		StaticANIObject *ani = (StaticANIObject *)obj;
+		if (obj->_objtype != kObjTypeStaticANIObject)
+			return false;
+
+		StaticANIObject *ani = static_cast<StaticANIObject *>(obj);
 
 		if (!ani->isIdle())
 			return false;
@@ -238,7 +237,7 @@ LABEL_38:
 
 	if (inter->isOverlapping(subj, obj)) {
 		if (obj->_objtype == kObjTypeStaticANIObject) {
-			StaticANIObject *ani = (StaticANIObject *)obj;
+			StaticANIObject *ani = static_cast<StaticANIObject *>(obj);
 
 			ani->queueMessageQueue(0);
 
@@ -298,10 +297,10 @@ LABEL_38:
 		bool someFlag = false;
 		PicAniInfo aniInfo;
 
-		obj->getPicAniInfo(&aniInfo);
+		obj->getPicAniInfo(aniInfo);
 
 		if (obj->_objtype == kObjTypeStaticANIObject && inter->_staticsId1) {
-			StaticANIObject *ani = (StaticANIObject *)obj;
+			StaticANIObject *ani = static_cast<StaticANIObject *>(obj);
 
 			ani->_messageQueueId = 0;
 			ani->changeStatics2(inter->_staticsId1);
@@ -310,7 +309,7 @@ LABEL_38:
 		int xpos = inter->_xOffs + obj->_ox;
 		int ypos = inter->_yOffs + obj->_oy;
 
-		obj->setPicAniInfo(&aniInfo);
+		obj->setPicAniInfo(aniInfo);
 
 		if (abs(xpos - subj->_ox) > 1 || abs(ypos - subj->_oy) > 1
 				|| (inter->_staticsId2 != 0 && (subj->_statics == 0 || subj->_statics->_staticsId != inter->_staticsId2))) {
@@ -343,7 +342,10 @@ LABEL_38:
 		if (!inter->_staticsId1 || !(inter->_flags & 1))
 			return true;
 
-		StaticANIObject *ani = (StaticANIObject *)obj;
+		if (obj->_objtype != kObjTypeStaticANIObject)
+			return false;
+
+		StaticANIObject *ani = static_cast<StaticANIObject *>(obj);
 
 		if (!ani->isIdle())
 			return false;
@@ -404,8 +406,8 @@ LABEL_38:
 }
 
 Interaction *InteractionController::getInteractionByObjectIds(int obId, int obId2, int obId3) {
-	for (ObList::iterator i = _interactions.begin(); i != _interactions.end(); ++i) {
-		Interaction *intr = (Interaction *)*i;
+	for (InteractionList::iterator i = _interactions.begin(); i != _interactions.end(); ++i) {
+		Interaction *intr = *i;
 
 		if (intr->_objectId1 == obId && intr->_objectId2 == obId2 && intr->_objectId3 == obId3)
 			return intr;
@@ -455,7 +457,7 @@ bool Interaction::load(MfcArchive &file) {
 	_flags = file.readUint32LE();
 	_actionName = file.readPascalString();
 
-	_messageQueue = (MessageQueue *)file.readClass();
+	_messageQueue = file.readClass<MessageQueue>();
 
 	return true;
 }
@@ -477,7 +479,7 @@ bool Interaction::canInteract(GameObject *obj1, GameObject *obj2, int invId) {
 		if (obj2->_objtype != kObjTypeStaticANIObject)
 			return false;
 
-		StaticANIObject *st = (StaticANIObject *)obj2;
+		StaticANIObject *st = static_cast<StaticANIObject *>(obj2);
 
 		if (!st->_statics)
 			return false;
@@ -518,13 +520,17 @@ bool Interaction::canInteract(GameObject *obj1, GameObject *obj2, int invId) {
 }
 
 bool Interaction::isOverlapping(StaticANIObject *subj, GameObject *obj) {
-	StaticANIObject *ani = (StaticANIObject *)obj;
-
 	if (abs(_xOffs + obj->_ox - subj->_ox) <= 1
 		&& abs(obj->_oy + _yOffs - subj->_oy) <= 1) {
 		if (!_staticsId2 || (subj->_statics != 0 && subj->_statics->_staticsId == _staticsId2)) {
-			if (!_staticsId1 || !(_flags & 1) || (ani->_statics != 0 && ani->_statics->_staticsId == _staticsId1))
+			if (!_staticsId1 || !(_flags & 1))
 				return true;
+
+			if (obj->_objtype == kObjTypeStaticANIObject) {
+				const StaticANIObject *ani = static_cast<StaticANIObject *>(obj);
+				if (ani->_statics != 0 && ani->_statics->_staticsId == _staticsId1)
+					return true;
+			}
 		}
 	}
 	return false;
@@ -536,7 +542,7 @@ bool EntranceInfo::load(MfcArchive &file) {
 	_sceneId = file.readUint32LE();
 	_field_4 = file.readUint32LE();
 	_messageQueueId = file.readUint32LE();
-	file.read(_gap_C, 292); // FIXME, Ugh
+	file.skip(292); // FIXME: Ugh
 	_field_130 = file.readUint32LE();
 
 	return true;

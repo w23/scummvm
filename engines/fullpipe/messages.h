@@ -31,6 +31,10 @@
 
 namespace Fullpipe {
 
+enum QueueFlags {
+	kInGlobalQueue = 2
+};
+
 class Message : public CObject {
  public:
 	int _messageKind;
@@ -49,8 +53,6 @@ class Message : public CObject {
 
  public:
 	Message();
-	Message(Message *src);
-	virtual ~Message() {}
 
 	Message(int16 parentId, int messageKind, int x, int y, int a6, int a7, int sceneClickX, int sceneClickY, int a10);
 };
@@ -82,12 +84,10 @@ class ExCommand : public Message {
 
 class ExCommand2 : public ExCommand {
  public:
-	Common::Point **_points;
-	int _pointsSize;
+	PointList _points;
 
-	ExCommand2(int messageKind, int parentId, Common::Point **points, int pointsSize);
+	ExCommand2(int messageKind, int parentId, const PointList &points);
 	ExCommand2(ExCommand2 *src);
-	virtual ~ExCommand2();
 
 	virtual ExCommand2 *createClone();
 };
@@ -100,7 +100,6 @@ class ObjstateCommand : public ExCommand {
  public:
 	ObjstateCommand();
 	ObjstateCommand(ObjstateCommand *src);
-	virtual ~ObjstateCommand();
 
 	virtual bool load(MfcArchive &file);
 
@@ -146,6 +145,7 @@ class MessageQueue : public CObject {
 
 	void setParamInt(int key1, int key2);
 
+	/** `ani` will own `this` if `chain` returns true */
 	bool chain(StaticANIObject *ani);
 	void update();
 	void sendNextCommand();
@@ -163,12 +163,14 @@ class MessageQueue : public CObject {
 };
 
 class GlobalMessageQueueList : public Common::Array<MessageQueue *> {
-  public:
+public:
 	MessageQueue *getMessageQueueById(int id);
 	void deleteQueueById(int id);
 	void removeQueueById(int id);
 	void disableQueueById(int id);
+	/** `msg` becomes owned by `this` */
 	void addMessageQueue(MessageQueue *msg);
+	void clear();
 
 	int compact();
 };

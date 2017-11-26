@@ -39,18 +39,16 @@ void global_messageHandler_KickStucco() {
 	bool flip = false;
 
 	for (int i = 0; i < end; i++) {
-		ExCommand *ex = mov->getDynamicPhaseByIndex(i)->_exCommand;
+		ExCommand *ex = mov->getDynamicPhaseByIndex(i)->getExCommand();
 
-		if (ex)
-			if (ex->_messageKind == 35)
-				if (ex->_messageNum == SND_CMN_015) {
-					if (flip) {
-						ex->_messageNum = SND_CMN_055;
-					} else {
-						ex->_messageNum = SND_CMN_054;
-						flip = true;
-					}
-				}
+		if (ex && ex->_messageKind == 35 && ex->_messageNum == SND_CMN_015) {
+			if (flip) {
+				ex->_messageNum = SND_CMN_055;
+			} else {
+				ex->_messageNum = SND_CMN_054;
+				flip = true;
+			}
+		}
 	}
 
 	mov = g_fp->_aniMan->getMovementById(MV_MAN_HMRKICK_COINLESS);
@@ -58,18 +56,16 @@ void global_messageHandler_KickStucco() {
 	flip = false;
 
 	for (int i = 0; i < end; i++) {
-		ExCommand *ex = mov->getDynamicPhaseByIndex(i)->_exCommand;
+		ExCommand *ex = mov->getDynamicPhaseByIndex(i)->getExCommand();
 
-		if (ex)
-			if (ex->_messageKind == 35)
-				if (ex->_messageNum == SND_CMN_015) {
-					if (flip) {
-						ex->_messageNum = SND_CMN_055;
-					} else {
-						ex->_messageNum = SND_CMN_054;
-						flip = true;
-					}
-				}
+		if (ex && ex->_messageKind == 35 && ex->_messageNum == SND_CMN_015) {
+			if (flip) {
+				ex->_messageNum = SND_CMN_055;
+			} else {
+				ex->_messageNum = SND_CMN_054;
+				flip = true;
+			}
+		}
 	}
 }
 
@@ -78,24 +74,24 @@ void global_messageHandler_KickMetal() {
 	int end = mov->_currMovement ? mov->_currMovement->_dynamicPhases.size() : mov->_dynamicPhases.size();
 
 	for (int i = 0; i < end; i++) {
-		ExCommand *ex = mov->getDynamicPhaseByIndex(i)->_exCommand;
+		ExCommand *ex = mov->getDynamicPhaseByIndex(i)->getExCommand();
 
-		if (ex)
-			if (ex->_messageKind == 35)
-				if (ex->_messageNum == SND_CMN_054 || ex->_messageNum == SND_CMN_055)
-					ex->_messageNum = SND_CMN_015;
+		if (ex && ex->_messageKind == 35) {
+			if (ex->_messageNum == SND_CMN_054 || ex->_messageNum == SND_CMN_055)
+				ex->_messageNum = SND_CMN_015;
+		}
 	}
 
 	mov = g_fp->_aniMan->getMovementById(MV_MAN_HMRKICK_COINLESS);
 	end = mov->_currMovement ? mov->_currMovement->_dynamicPhases.size() : mov->_dynamicPhases.size();
 
 	for (int i = 0; i < end; i++) {
-		ExCommand *ex = mov->getDynamicPhaseByIndex(i)->_exCommand;
+		ExCommand *ex = mov->getDynamicPhaseByIndex(i)->getExCommand();
 
-		if (ex)
-			if (ex->_messageKind == 35)
-				if (ex->_messageNum == SND_CMN_054 || ex->_messageNum == SND_CMN_055)
-					ex->_messageNum = SND_CMN_015;
+		if (ex && ex->_messageKind == 35) {
+			if (ex->_messageNum == SND_CMN_054 || ex->_messageNum == SND_CMN_055)
+				ex->_messageNum = SND_CMN_015;
+		}
 	}
 }
 
@@ -204,9 +200,9 @@ int global_messageHandler1(ExCommand *cmd) {
 			case '8':
 				{
 					int num = 32;
-					for (int i = 0; i < g_fp->_gameLoader->_sc2array[num]._picAniInfosCount; i++) {
+					for (uint i = 0; i < g_fp->_gameLoader->_sc2array[num]._picAniInfos.size(); i++) {
 						debug("pic %d, %d:", num, i);
-						g_fp->_gameLoader->_sc2array[num]._picAniInfos[i]->print();
+						g_fp->_gameLoader->_sc2array[num]._picAniInfos[i].print();
 					}
 				}
 				break;
@@ -345,7 +341,7 @@ int global_messageHandler2(ExCommand *cmd) {
 			SoundList *s = g_fp->_currSoundList1[snd];
 			int ms = s->getCount();
 			for (int i = 0; i < ms; i++) {
-				s->getSoundByIndex(i)->setPanAndVolumeByStaticAni();
+				s->getSoundByIndex(i).setPanAndVolumeByStaticAni();
 			}
 		}
 	}
@@ -517,7 +513,7 @@ int global_messageHandler3(ExCommand *cmd) {
 		return doSomeAnimation2(cmd->_parentId, cmd->_param);
 	case 63:
 		if (cmd->_objtype == kObjTypeObjstateCommand) {
-			ObjstateCommand *c = (ObjstateCommand *)cmd;
+			ObjstateCommand *c = static_cast<ObjstateCommand *>(cmd);
 			result = 1;
 			g_fp->setObjectState(c->_objCommandName.c_str(), c->_value);
 		}
@@ -595,12 +591,14 @@ int global_messageHandler4(ExCommand *cmd) {
 		if (flags <= 0)
 			flags = -1;
 
-		ExCommand2 *cmd2 = (ExCommand2 *)cmd;
+		if (cmd->_objtype == kObjTypeExCommand2) {
+			ExCommand2 *cmd2 = static_cast<ExCommand2 *>(cmd);
 
-		if (cmd->_excFlags & 1) {
-			ani->startAnimSteps(cmd->_messageNum, 0, cmd->_x, cmd->_y, cmd2->_points, cmd2->_pointsSize, flags);
-		} else {
-			ani->startAnimSteps(cmd->_messageNum, cmd->_parId, cmd->_x, cmd->_y, cmd2->_points, cmd2->_pointsSize, flags);
+			if (cmd->_excFlags & 1) {
+				ani->startAnimSteps(cmd->_messageNum, 0, cmd->_x, cmd->_y, cmd2->_points, flags);
+			} else {
+				ani->startAnimSteps(cmd->_messageNum, cmd->_parId, cmd->_x, cmd->_y, cmd2->_points, flags);
+			}
 		}
 		break;
 	}
@@ -754,7 +752,7 @@ int global_messageHandler4(ExCommand *cmd) {
 	return 1;
 }
 
-int MovGraph_messageHandler(ExCommand *cmd) {
+int MovGraph::messageHandler(ExCommand *cmd) {
 	if (cmd->_messageKind != 17)
 		return 0;
 
@@ -769,20 +767,20 @@ int MovGraph_messageHandler(ExCommand *cmd) {
 	if (getSc2MctlCompoundBySceneId(g_fp->_currentScene->_sceneId)->_objtype != kObjTypeMovGraph || !ani)
 		return 0;
 
-	MovGraph *gr = (MovGraph *)getSc2MctlCompoundBySceneId(g_fp->_currentScene->_sceneId);
+	MovGraph *gr = getSc2MovGraphBySceneId(g_fp->_currentScene->_sceneId);
 
 	MovGraphLink *link = 0;
 	double mindistance = 1.0e10;
 	Common::Point point;
 
-	for (ObList::iterator i = gr->_links.begin(); i != gr->_links.end(); ++i) {
+	for (LinkList::iterator i = gr->_links.begin(); i != gr->_links.end(); ++i) {
 		point.x = ani->_ox;
 		point.y = ani->_oy;
 
-		double dst = gr->putToLink(&point, (MovGraphLink *)(*i), 0);
+		double dst = gr->putToLink(&point, *i, 0);
 		if (dst >= 0.0 && dst < mindistance) {
 			mindistance = dst;
-			link = (MovGraphLink *)(*i);
+			link = *i;
 		}
 	}
 
@@ -801,12 +799,12 @@ int MovGraph_messageHandler(ExCommand *cmd) {
 	}
 
 	if (ani->_movement) {
-		ani->_movement->_currDynamicPhase->_rect->top = 255 - top;
+		ani->_movement->_currDynamicPhase->_rect.top = 255 - top;
 		return 0;
 	}
 
 	if (ani->_statics)
-		ani->_statics->_rect->top = 255 - top;
+		ani->_statics->_rect.top = 255 - top;
 
 	return 0;
 }
